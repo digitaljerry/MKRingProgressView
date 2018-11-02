@@ -24,8 +24,16 @@
 
 import UIKit
 
+public protocol RingProgressDelegate {
+    func didGenerateNewGradient(image: CGImage, withKey: String)
+    func didUseGradientFromCache()
+}
+
 @objc(MKRingProgressLayer)
 open class RingProgressLayer: CALayer {
+    
+    public var gradientDelegate: RingProgressDelegate?
+    
     /// The progress ring start color.
     @objc open var startColor = UIColor.red.cgColor {
         didSet {
@@ -99,7 +107,8 @@ open class RingProgressLayer: CALayer {
     internal var disableProgressAnimation: Bool = false
 
     private let gradientGenerator = GradientGenerator()
-
+    public var cachedGradient: CGImage?
+    
     open override class func needsDisplay(forKey key: String) -> Bool {
         if key == "progress" {
             return true
@@ -250,13 +259,25 @@ open class RingProgressLayer: CALayer {
             guard useGradient else {
                 return nil
             }
+            if cachedGradient != nil {
+                gradientDelegate?.didUseGradientFromCache()
+                return cachedGradient
+            }
+            
             let s = Float(1.5 * w / (2 * .pi * r))
             gradientGenerator.scale = gradientImageScale
             gradientGenerator.size = gradientRect.size
             gradientGenerator.colors = [endColor, endColor, startColor, startColor]
             gradientGenerator.locations = [0.0, s, (1.0 - s), 1.0]
             gradientGenerator.endPoint = CGPoint(x: 0.5 - CGFloat(2 * s), y: 1.0)
-            return gradientGenerator.image()
+            let image = gradientGenerator.image()
+            
+            cachedGradient = image
+            
+            let key = "gradient_\(startColor.hashValue)_\(endColor.hashValue)_\(gradientRect.size.width)_\(gradientRect.size.height)"
+            gradientDelegate?.didGenerateNewGradient(image: image, withKey: key)
+            
+            return image
         }()
 
         if p > 0.0 {
